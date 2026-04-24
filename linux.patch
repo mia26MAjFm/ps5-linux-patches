@@ -2081,13 +2081,14 @@ index 000000000000..2f897b7e21e2
 +EXPORT_SYMBOL(hdmi_notification_handler);
 diff --git a/drivers/ps5/spcie.c b/drivers/ps5/spcie.c
 new file mode 100644
-index 000000000000..2985aa9fda9c
+index 000000000000..fd0eec9e80c4
 --- /dev/null
 +++ b/drivers/ps5/spcie.c
-@@ -0,0 +1,526 @@
+@@ -0,0 +1,564 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
++#include <linux/miscdevice.h>
 +#include <linux/pci.h>
 +#include <linux/ps5.h>
 +
@@ -2116,6 +2117,10 @@ index 000000000000..2985aa9fda9c
 +#define ICC_MSG_TYPE_NOTIF	0x8000
 +
 +#define ICC_TIMEOUT_MSECS	12000
++
++#define ICC_IOC_MAGIC		'I'
++
++#define ICC_FAN_CHANGE_SERVO_PATTERN	_IOW(ICC_IOC_MAGIC, 1, u8)
 +
 +struct spcie_dev;
 +
@@ -2417,7 +2422,7 @@ index 000000000000..2985aa9fda9c
 +	struct icc_msg *msg = (struct icc_msg *)buf;
 +
 +	msg->service_id = ICC_SERVICE_ID_FAN;
-+	msg->msg_type = 0xB;
++	msg->msg_type = 0xb;
 +	msg->length = 0x20;
 +	msg->data[0] = pattern;
 +	msg->data[1] = pattern;
@@ -2490,10 +2495,38 @@ index 000000000000..2985aa9fda9c
 +	return IRQ_HANDLED;
 +}
 +
++static long icc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	switch (cmd) {
++	case ICC_FAN_CHANGE_SERVO_PATTERN:
++	{
++		u8 pattern;
++		if (copy_from_user(&pattern, (u8 __user *)arg, sizeof(u8)))
++			return -EFAULT;
++
++		pr_info("Setting fan pattern to %u\n", pattern);
++		return icc_fan_change_servo_pattern(pattern);
++	}
++
++	default:
++		return -ENOTTY;
++	}
++}
++
++static const struct file_operations icc_fops = {
++	.owner = THIS_MODULE,
++	.unlocked_ioctl = icc_ioctl,
++};
++
++static struct miscdevice icc_misc_device = {
++	.minor = MISC_DYNAMIC_MINOR,
++	.name = "icc",
++	.fops = &icc_fops,
++};
++
 +static int spcie_icc_init(struct spcie_dev *sdev)
 +{
-+	int ret;
-+	int vector;
++	int vector, ret;
 +
 +	icc_dev = devm_kzalloc(&sdev->pdev->dev, sizeof(*icc_dev), GFP_KERNEL);
 +	if (!icc_dev)
@@ -2537,11 +2570,16 @@ index 000000000000..2985aa9fda9c
 +	sceControlHdmiEvent(1);
 +	sceHdmiInitVideoConfig();
 +
++	ret = misc_register(&icc_misc_device);
++	if (ret)
++		return ret;
++
 +	return 0;
 +}
 +
 +static int spcie_icc_remove(struct spcie_dev *sdev)
 +{
++	misc_deregister(&icc_misc_device);
 +	return 0;
 +}
 +
@@ -2989,18 +3027,19 @@ index 000000000000..9b34ae8f2b73
 +
 +#endif /* _LINUX_PS5_H */
 diff --git a/scripts/setlocalversion b/scripts/setlocalversion
-index 28169d7e143b..1f6893a6bc59 100755
+index 28169d7e143b..44f516daa21d 100755
 --- a/scripts/setlocalversion
 +++ b/scripts/setlocalversion
-@@ -58,7 +58,7 @@ try_tag() {
- scm_version()
- {
- 	local short=false
--	local no_dirty=false
-+	local no_dirty=true
+@@ -61,6 +61,9 @@ scm_version()
+ 	local no_dirty=false
  	local tag
  
++	# Do not add any suffix for ps5-linux.
++	return
++
  	while [ $# -gt 0 ];
+ 	do
+ 		case "$1" in
 diff --git a/sound/hda/controllers/intel.c b/sound/hda/controllers/intel.c
 index a4104376523a..befee7ef6c94 100644
 --- a/sound/hda/controllers/intel.c
