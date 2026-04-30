@@ -1021,22 +1021,24 @@ index f3fd7f39efb4..7dd1b138ae78 100644
  	if (amd_iommu_irq_remap) {
  		struct amd_iommu_pci_seg *pci_seg;
 diff --git a/drivers/pci/probe.c b/drivers/pci/probe.c
-index bccc7a4bdd79..ee8e93b79e9f 100644
+index bccc7a4bdd79..ed434b9650e9 100644
 --- a/drivers/pci/probe.c
 +++ b/drivers/pci/probe.c
-@@ -2807,7 +2807,12 @@ static int next_ari_fn(struct pci_bus *bus, struct pci_dev *dev, int fn)
+@@ -2802,6 +2802,14 @@ static int next_ari_fn(struct pci_bus *bus, struct pci_dev *dev, int fn)
+ 	u16 cap = 0;
+ 	unsigned int next_fn;
  
- 	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ARI);
- 	if (!pos)
 +#ifdef CONFIG_X86_PS5
-+		/* PCI config via sfc_read does not have ARI capability, so just assume fn + 1. */
++	/* ARI capability is broken, so we just assume contiguous functions until 45. */
++	if (fn < 45)
 +		return fn + 1;
-+#else
- 		return -ENODEV;
++	else
++		return -ENODEV;
 +#endif
++
+ 	if (!dev)
+ 		return -ENODEV;
  
- 	pci_read_config_word(dev, pos + PCI_ARI_CAP, &cap);
- 	next_fn = PCI_ARI_CAP_NFN(cap);
 diff --git a/drivers/ps5/Makefile b/drivers/ps5/Makefile
 new file mode 100644
 index 000000000000..7acb030a4976
