@@ -440,6 +440,44 @@ index 53fbd2e0acdd..d36c1909e0e6 100644
  obj-$(CONFIG_S390)		+= s390/
 +
 +obj-$(CONFIG_X86_PS5)		+= ps5/
+diff --git a/drivers/firmware/dmi_scan.c b/drivers/firmware/dmi_scan.c
+index 70d39adf50dc..bb6eefe67cfb 100644
+--- a/drivers/firmware/dmi_scan.c
++++ b/drivers/firmware/dmi_scan.c
+@@ -675,6 +675,18 @@ static void __init dmi_scan_machine(void)
+ 	char __iomem *p, *q;
+ 	char buf[32];
+ 
++#ifdef CONFIG_X86_PS5
++	if (!dmi_available) {
++		dmi_ident[DMI_SYS_VENDOR] = "Sony Interactive Entertainment";
++		dmi_ident[DMI_PRODUCT_NAME] = "PlayStation 5";
++		/* Filled by spcie.c */
++		dmi_ident[DMI_PRODUCT_VERSION] = "Unknown";
++		dmi_ident[DMI_PRODUCT_SERIAL] = "Unknown";
++		dmi_available = 1;
++		return;
++	}
++#endif
++
+ 	if (efi_enabled(EFI_CONFIG_TABLES)) {
+ 		/*
+ 		 * According to the DMTF SMBIOS reference spec v3.0.0, it is
+@@ -953,6 +965,14 @@ const char *dmi_get_system_info(int field)
+ }
+ EXPORT_SYMBOL(dmi_get_system_info);
+ 
++#ifdef CONFIG_X86_PS5
++void dmi_set_system_info(int field, const char *str)
++{
++	dmi_ident[field] = str;
++}
++EXPORT_SYMBOL(dmi_set_system_info);
++#endif
++
+ /**
+  * dmi_name_in_serial - Check if string is in the DMI product serial information
+  * @str: string to check for
 diff --git a/drivers/gpu/drm/amd/amdgpu/amdgpu.h b/drivers/gpu/drm/amd/amdgpu/amdgpu.h
 index 447e734c362b..c52c81e084a7 100644
 --- a/drivers/gpu/drm/amd/amdgpu/amdgpu.h
@@ -536,7 +574,7 @@ index af3d2fd61cf3..c31152f5a158 100644
  		break;
  	default:
 diff --git a/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c b/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c
-index c91638e65174..c9e4bd5dee98 100644
+index c91638e65174..c25b073ca658 100644
 --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c
 +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c
 @@ -41,6 +41,10 @@
@@ -1088,7 +1126,7 @@ index 000000000000..7acb030a4976
 +obj-y += spcie.o tpcie.o hdmi.o mp1.o
 diff --git a/drivers/ps5/hdmi.c b/drivers/ps5/hdmi.c
 new file mode 100644
-index 000000000000..1edee8c4316c
+index 000000000000..d819d8f254d8
 --- /dev/null
 +++ b/drivers/ps5/hdmi.c
 @@ -0,0 +1,1035 @@
@@ -2463,16 +2501,17 @@ index 000000000000..ef5c9dcb43ef
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/spcie.c b/drivers/ps5/spcie.c
 new file mode 100644
-index 000000000000..9e1b790465f8
+index 000000000000..2dedc3b11a45
 --- /dev/null
 +++ b/drivers/ps5/spcie.c
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,614 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
 +#include <linux/miscdevice.h>
 +#include <linux/pci.h>
 +#include <linux/ps5.h>
++#include <linux/dmi.h>
 +
 +#define PCI_DEVICE_ID_SPCIE	0x9107
 +#define SPCIE_SUBFUNC_ICC	12
@@ -2622,6 +2661,48 @@ index 000000000000..9e1b790465f8
 +}
 +EXPORT_SYMBOL(icc_query);
 +
++int icc_nvs_write(u32 partition, u16 offset, u16 length, const void *data)
++{
++	u8 buf[ICC_MSG_MAX_SIZE] = {};
++	struct icc_msg *msg = (struct icc_msg *)buf;
++
++	msg->service_id = ICC_SERVICE_ID_NVS;
++	msg->msg_type = 0;
++	msg->length = sizeof(*msg) + 6 + length;
++	msg->data[0] = 0;
++	msg->data[1] = partition;
++	*(u16 *)&msg->data[2] = offset;
++	*(u16 *)&msg->data[4] = length;
++	memcpy(&msg->data[6], data, length);
++
++	return icc_query(buf, buf);
++}
++EXPORT_SYMBOL(icc_nvs_write);
++
++int icc_nvs_read(u32 partition, u16 offset, u16 length, void *data)
++{
++	u8 buf[ICC_MSG_MAX_SIZE] = {};
++	struct icc_msg *msg = (struct icc_msg *)buf;
++	int ret;
++
++	msg->service_id = ICC_SERVICE_ID_NVS;
++	msg->msg_type = 1;
++	msg->length = ICC_MSG_MIN_SIZE;
++	msg->data[0] = 0;
++	msg->data[1] = partition;
++	*(u16 *)&msg->data[2] = offset;
++	*(u16 *)&msg->data[4] = length;
++
++	ret = icc_query(buf, buf);
++	if (ret)
++		return ret;
++
++	memcpy(data, &msg->data[2], length);
++
++	return 0;
++}
++EXPORT_SYMBOL(icc_nvs_read);
++
 +int icc_usbc_set_pdcon_op_mode(u8 PortId, u8 OpMode)
 +{
 +	u8 buf[ICC_MSG_MAX_SIZE] = {};
@@ -2736,17 +2817,17 @@ index 000000000000..9e1b790465f8
 +{
 +	int ret;
 +
-+	// power button
++	/* power button */
 +	ret = icc_button_enable_notification(0, enable);
 +	if (ret)
 +		return ret;
 +
-+	// eject button
++	/* eject button */
 +	ret = icc_button_enable_notification(1, enable);
 +	if (ret)
 +		return ret;
 +
-+	// reset button
++	/* reset button */
 +	ret = icc_button_enable_notification(2, enable);
 +	if (ret)
 +		return ret;
@@ -2841,7 +2922,7 @@ index 000000000000..9e1b790465f8
 +		if (!intr_status)
 +			break;
 +
-+		// Ack the interrupt.
++		/* Ack the interrupt */
 +		writel(intr_status, icc_dev->icc_doorbell_base + ICC_REG_INTR_STATUS);
 +
 +		if (intr_status & ICC_SEND) {
@@ -2923,29 +3004,38 @@ index 000000000000..9e1b790465f8
 +	icc_dev->icc_doorbell_base = sdev->bar2 + ICC_DOORBELL_OFFSET;
 +	icc_dev->icc_base = sdev->bar4;
 +
-+	// Clear status.
++	/* Clear status */
 +	writel(ICC_SEND | ICC_ACK, icc_dev->icc_doorbell_base + ICC_REG_INTR_STATUS);
 +
-+	// Request IRQ for icc subfunc.
++	/* Request IRQ for icc subfunc */
 +	vector = pci_irq_vector(sdev->pdev, SPCIE_SUBFUNC_ICC);
 +	ret = devm_request_irq(&sdev->pdev->dev, vector, icc_interrupt, 0, "icc", icc_dev);
 +	if (ret)
 +		return ret;
 +
-+	// Enable IRQs.
++	/* Enable IRQs */
 +	writel(ICC_SEND | ICC_ACK, icc_dev->icc_doorbell_base + ICC_REG_INTR_MASK);
 +
-+	// Enable notifications.
++	/* Set DMI info */
++	static char hw_model[32] = {0}, hw_info[32] = {0};
++	if (icc_nvs_read(2, 0x30, 0x20, hw_model) == 0) {
++		dmi_set_system_info(DMI_PRODUCT_VERSION, hw_model);
++	}
++	if (icc_nvs_read(2, 0x10, 0x11, hw_info) == 0) {
++		dmi_set_system_info(DMI_PRODUCT_SERIAL, hw_info);
++	}
++
++	/* Enable notifications */
 +	icc_button_enable_all_notifications(1);
 +	icc_thermal_enable_notification(1);
 +
-+	// Set LED to white dim.
++	/* Set LED to white dim */
 +	icc_indicator_set_led_white(0);
 +
-+	// Enable SuperSpeed-USB-C port.
++	/* Enable SuperSpeed-USB-C port */
 +	icc_usbc_set_pdcon_op_mode(0, 5);
 +
-+	// Initialize HDMI.
++	/* Initialize HDMI */
 +	getHdmiConfiguration();
 +	sceControlHdmiEvent(1);
 +	sceHdmiInitVideoConfig();
@@ -3031,10 +3121,10 @@ index 000000000000..9e1b790465f8
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/tpcie.c b/drivers/ps5/tpcie.c
 new file mode 100644
-index 000000000000..7d0aa58aaf93
+index 000000000000..cfe53c9861c1
 --- /dev/null
 +++ b/drivers/ps5/tpcie.c
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,294 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/console.h>
@@ -3222,20 +3312,20 @@ index 000000000000..7d0aa58aaf93
 +
 +	register_console(&tpcie_uart_console);
 +
-+	// Request IRQ for uart subfunc.
++	/* Request IRQ for uart subfunc */
 +	vector = pci_irq_vector(tdev->pdev, TPCIE_SUBFUNC_UART);
 +	ret = devm_request_irq(&tdev->pdev->dev, vector, uart_interrupt, 0, "uart", uart_dev);
 +	if (ret)
 +		goto err_unreg_tty;
 +
-+	// Special MSI configuration.
++	/* Special MSI configuration */
 +	ret = irq_chip_compose_msi_msg(irq_get_irq_data(vector), &msg);
 +	if (ret)
 +		goto err_unreg_tty;
 +
 +	tcpie_config_msi(tdev, TPCIE_SUBFUNC_UART, &msg);
 +
-+	// Enable IRQs.
++	/* Enable IRQs */
 +	writel(0x10, uart_dev->uart_base + 0x8);
 +
 +	return 0;
@@ -3252,9 +3342,8 @@ index 000000000000..7d0aa58aaf93
 +	if (!uart_dev)
 +		return;
 +
-+	// Disable IRQs.
-+	if (uart_dev->uart_base)
-+		writel(0, uart_dev->uart_base + 0x8);
++	/* Disable IRQs */
++	writel(0, uart_dev->uart_base + 0x8);
 +
 +	unregister_console(&tpcie_uart_console);
 +
@@ -3330,12 +3419,26 @@ index 000000000000..7d0aa58aaf93
 +MODULE_AUTHOR("Andy Nguyen");
 +MODULE_DESCRIPTION("PlayStation 5 Titania PCI Express glue driver");
 +MODULE_LICENSE("GPL");
+diff --git a/include/linux/dmi.h b/include/linux/dmi.h
+index 927f8a8b7a1d..474f1207e2f3 100644
+--- a/include/linux/dmi.h
++++ b/include/linux/dmi.h
+@@ -100,6 +100,9 @@ extern struct kobject *dmi_kobj;
+ extern int dmi_check_system(const struct dmi_system_id *list);
+ const struct dmi_system_id *dmi_first_match(const struct dmi_system_id *list);
+ extern const char * dmi_get_system_info(int field);
++#ifdef CONFIG_X86_PS5
++extern void dmi_set_system_info(int field, const char *str);
++#endif
+ extern const struct dmi_device * dmi_find_device(int type, const char *name,
+ 	const struct dmi_device *from);
+ extern void dmi_setup(void);
 diff --git a/include/linux/ps5.h b/include/linux/ps5.h
 new file mode 100644
-index 000000000000..9b34ae8f2b73
+index 000000000000..b510bd4f9dab
 --- /dev/null
 +++ b/include/linux/ps5.h
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,74 @@
 +#ifndef _LINUX_PS5_H
 +#define _LINUX_PS5_H
 +
@@ -3387,6 +3490,9 @@ index 000000000000..9b34ae8f2b73
 +void sceHdmiSetAudioMute(int mute);
 +int getHdmiConfiguration(void);
 +int isHdmiEnabled(void);
++
++int icc_nvs_write(u32 partition, u16 offset, u16 length, const void *data);
++int icc_nvs_read(u32 partition, u16 offset, u16 length, void *data);
 +
 +int icc_usbc_set_pdcon_op_mode(u8 PortId, u8 OpMode);
 +int icc_configuration_set_cpu_info_bit(u8 *bit);
