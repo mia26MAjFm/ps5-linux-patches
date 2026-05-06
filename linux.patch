@@ -818,10 +818,21 @@ index e3a035c9fece..6eb67dd7b52c 100644
  	if (r)
  		return r;
 diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-index 2328c1aa0ead..824cab06abb1 100644
+index 2328c1aa0ead..8eb9c4a327d7 100644
 --- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
 +++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-@@ -3003,7 +3003,10 @@ static int dm_hw_init(struct amdgpu_ip_block *ip_block)
+@@ -80,6 +80,10 @@
+ #include <linux/component.h>
+ #include <linux/sort.h>
+ 
++#ifdef CONFIG_X86_PS5
++#include <linux/ps5.h>
++#endif
++
+ #include <drm/drm_privacy_screen_consumer.h>
+ #include <drm/display/drm_dp_mst_helper.h>
+ #include <drm/display/drm_hdmi_helper.h>
+@@ -3003,7 +3007,10 @@ static int dm_hw_init(struct amdgpu_ip_block *ip_block)
  	r = amdgpu_dm_init(adev);
  	if (r)
  		return r;
@@ -832,7 +843,7 @@ index 2328c1aa0ead..824cab06abb1 100644
  
  	r = dm_oem_i2c_hw_init(adev);
  	if (r)
-@@ -3024,7 +3027,10 @@ static int dm_hw_fini(struct amdgpu_ip_block *ip_block)
+@@ -3024,7 +3031,10 @@ static int dm_hw_fini(struct amdgpu_ip_block *ip_block)
  {
  	struct amdgpu_device *adev = ip_block->adev;
  
@@ -843,55 +854,68 @@ index 2328c1aa0ead..824cab06abb1 100644
  
  	amdgpu_dm_irq_fini(adev);
  	amdgpu_dm_fini(adev);
-@@ -6805,6 +6811,12 @@ static void fill_stream_properties_from_drm_display_mode(
+@@ -6805,6 +6815,12 @@ static void fill_stream_properties_from_drm_display_mode(
  
  	stream->output_color_space = get_output_color_space(timing_out, connector_state);
  	stream->content_type = get_output_content_type(connector_state);
 +
 +#ifdef CONFIG_X86_PS5
 +	/* Hardcode RGB888. */
-+	timing_out->pixel_encoding = PIXEL_ENCODING_RGB;
-+	timing_out->display_color_depth = COLOR_DEPTH_888;
++	// timing_out->pixel_encoding = PIXEL_ENCODING_RGB;
++	// timing_out->display_color_depth = COLOR_DEPTH_888;
 +#endif
  }
  
  static void fill_audio_info(struct audio_info *audio_info,
-@@ -8181,6 +8193,23 @@ create_validate_stream_for_sink(struct drm_connector *connector,
- 	return stream;
- }
- 
-+#ifdef CONFIG_X86_PS5
-+static bool is_ps5_supported(const struct drm_display_mode *mode)
-+{
-+	if (amdgpu_force_1080p)
-+		return mode->clock == 148500;
-+
-+	switch (mode->clock) {
-+	case 148500: /* 1080p60 */
-+	case 241500: /* 1440p60 */
-+	case 241700: /* 1440p60 */
-+	case 594000: /* 2160p60 */
-+		return true;
-+	}
-+	return false;
-+}
-+#endif
-+
- enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
- 				   const struct drm_display_mode *mode)
- {
-@@ -8194,6 +8223,11 @@ enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connec
+@@ -8194,6 +8210,11 @@ enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connec
  	 */
  	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
  
 +#ifdef CONFIG_X86_PS5
-+	if (!is_ps5_supported(mode))
++	if (!isHdmiModeValid(mode, amdgpu_force_1080p))
 +		return MODE_ERROR;
 +#endif
 +
  	if ((mode->flags & DRM_MODE_FLAG_INTERLACE) ||
  			(mode->flags & DRM_MODE_FLAG_DBLSCAN))
  		return result;
+@@ -10454,6 +10475,9 @@ static void amdgpu_dm_commit_streams(struct drm_atomic_state *state,
+ 				      new_crtc_state, i) {
+ 		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
+ 
++#ifdef CONFIG_X86_PS5
++		dm_new_crtc_state = to_dm_crtc_state(new_crtc_state);
++#endif
+ 		dm_old_crtc_state = to_dm_crtc_state(old_crtc_state);
+ 
+ 		if (old_crtc_state->active &&
+@@ -10461,6 +10485,11 @@ static void amdgpu_dm_commit_streams(struct drm_atomic_state *state,
+ 		     drm_atomic_crtc_needs_modeset(new_crtc_state))) {
+ 			manage_dm_interrupts(adev, acrtc, NULL);
+ 			dc_stream_release(dm_old_crtc_state->stream);
++#ifdef CONFIG_X86_PS5
++			if (dm_new_crtc_state->stream && dc_is_dp_signal(dm_new_crtc_state->stream->signal)) {
++				sceHdmiInitVideoConfig();
++			}
++#endif
+ 		}
+ 	}
+ 
+@@ -11031,6 +11060,14 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
+ 			dc_stream_retain(dm_new_crtc_state->stream);
+ 			acrtc->dm_irq_params.stream = dm_new_crtc_state->stream;
+ 			manage_dm_interrupts(adev, acrtc, dm_new_crtc_state);
++#ifdef CONFIG_X86_PS5
++			if (dm_new_crtc_state->stream && dc_is_dp_signal(dm_new_crtc_state->stream->signal)) {
++				sceHdmiSetVideoConfig(&new_crtc_state->mode);
++				sceHdmiSetAudioConfig();
++				sceHdmiDeviceSetVideoMute(0);
++				sceHdmiSetAudioMute(0);
++			}
++#endif
+ 		}
+ 		/* Handle vrr on->off / off->on transitions */
+ 		amdgpu_dm_handle_vrr_transition(dm_old_crtc_state, dm_new_crtc_state);
 diff --git a/drivers/gpu/drm/amd/display/dc/core/dc_resource.c b/drivers/gpu/drm/amd/display/dc/core/dc_resource.c
 index 03d125f794b0..aa25e593a000 100644
 --- a/drivers/gpu/drm/amd/display/dc/core/dc_resource.c
@@ -964,51 +988,6 @@ index 699a756bbc40..4a9d4ba6abf4 100644
  	if (dc->res_pool->dp_clock_source->funcs->cs_power_down(
  		dc->res_pool->dp_clock_source) == false)
  		dm_error("Failed to power down pll! (dp clk src)\n");
-diff --git a/drivers/gpu/drm/amd/display/dc/link/link_dpms.c b/drivers/gpu/drm/amd/display/dc/link/link_dpms.c
-index 9b1d34c3438b..3c63ec7198af 100644
---- a/drivers/gpu/drm/amd/display/dc/link/link_dpms.c
-+++ b/drivers/gpu/drm/amd/display/dc/link/link_dpms.c
-@@ -35,6 +35,9 @@
-  * boundary between link and stream is not clearly defined.
-  */
- 
-+#ifdef CONFIG_X86_PS5
-+#include <linux/ps5.h>
-+#endif
- #include "link_dpms.h"
- #include "link_hwss.h"
- #include "link_validation.h"
-@@ -2323,6 +2326,12 @@ void link_set_dpms_off(struct pipe_ctx *pipe_ctx)
- 	if (dc_is_virtual_signal(pipe_ctx->stream->signal))
- 		return;
- 
-+#ifdef CONFIG_X86_PS5
-+	sceHdmiSetAudioMute(1);
-+	sceHdmiDeviceSetVideoMute(1);
-+	sceHdmiInitVideoConfig();
-+#endif
-+
- 	if (pipe_ctx->stream->sink) {
- 		if (pipe_ctx->stream->sink->sink_signal != SIGNAL_TYPE_VIRTUAL &&
- 			pipe_ctx->stream->sink->sink_signal != SIGNAL_TYPE_NONE) {
-@@ -2634,4 +2643,17 @@ void link_set_dpms_on(
- 	if (dc_is_hdmi_signal(pipe_ctx->stream->signal)) {
- 		set_avmute(pipe_ctx, false);
- 	}
-+
-+#ifdef CONFIG_X86_PS5
-+	struct dc_crtc_timing *t = &pipe_ctx->stream->timing;
-+
-+	int w = t->h_addressable;
-+	int h = t->v_addressable;
-+	int hz = (t->pix_clk_100hz * 100) / (t->h_total * t->v_total);
-+
-+	sceHdmiSetVideoConfig(w, h, hz);
-+	sceHdmiSetAudioConfig();
-+	sceHdmiDeviceSetVideoMute(0);
-+	sceHdmiSetAudioMute(0);
-+#endif
- }
 diff --git a/drivers/gpu/drm/amd/display/dc/link/protocols/link_dp_capability.c b/drivers/gpu/drm/amd/display/dc/link/protocols/link_dp_capability.c
 index cdc7587cf0b6..7a7b17fe5a89 100644
 --- a/drivers/gpu/drm/amd/display/dc/link/protocols/link_dp_capability.c
@@ -1156,10 +1135,10 @@ index 000000000000..7acb030a4976
 +obj-y += spcie.o tpcie.o hdmi.o mp1.o
 diff --git a/drivers/ps5/hdmi.c b/drivers/ps5/hdmi.c
 new file mode 100644
-index 000000000000..449f1a573515
+index 000000000000..8610cb9bf909
 --- /dev/null
 +++ b/drivers/ps5/hdmi.c
-@@ -0,0 +1,1035 @@
+@@ -0,0 +1,1063 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -1751,8 +1730,11 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void setHdmiBasicVideoConfigFlava3(int w, int h, int hz)
++static void setHdmiBasicVideoConfigFlava3(const struct drm_display_mode *mode)
 +{
++	u8 vic = drm_match_cea_mode(mode);
++	int hz = drm_mode_vrefresh(mode);
++
 +	i2c_init(1);
 +	i2c_mask(0x7021, 0x00, 0xf0);
 +	i2c_delay(500);
@@ -1765,17 +1747,16 @@ index 000000000000..449f1a573515
 +	i2c_write(0x7005, 0x80);
 +	i2c_write(0x7009, 0x00);
 +	i2c_write(0x7040, 0x42);
-+	/* Set colorimetry and aspect ratio (HDTV and 16:9) */
-+	i2c_write(0x7225, 0x20 | 0x08);
-+	if (h == 1080) {
++	i2c_write(0x7225, 0x28);
++	if (vic == 16) {
 +		/* Set VIC and content type */
 +		i2c_write_data(0x7227, (u8[]){0x10, 0x00}, 2);
 +		i2c_write_data(0x7070, (u8[]){0x10, 0x10, 0x00, 0x00, 0x00, 0x00}, 6);
-+	} else if (h == 1440) {
++	} else if (mode->hdisplay == 2560 && mode->vdisplay == 1440) {
 +		/* Set VIC and content type */
 +		i2c_write_data(0x7227, (u8[]){0x04, 0x00}, 2);
 +		i2c_write_data(0x7070, (u8[]){0x00, 0x00, 0x00, 0x00, 0x00, 0xfb}, 6);
-+	} else if (h == 2160) {
++	} else if (vic == 97) {
 +		/* Set VIC and content type */
 +		i2c_write_data(0x7227, (u8[]){0x06, 0x00}, 2);
 +		i2c_write_data(0x7070, (u8[]){0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 6);
@@ -1795,7 +1776,7 @@ index 000000000000..449f1a573515
 +	}
 +	i2c_write(0x10e7, 0xff);
 +	i2c_write(0x7202, 0x20);
-+	if (h == 2160) {
++	if (vic == 97) {
 +		i2c_write(0x7072, 0x01);
 +		i2c_write(0x7074, 0x07);
 +		i2c_write(0x7206, 0x80);
@@ -1810,13 +1791,15 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void setVideoAdditionalConfigFlava3(int w, int h, int hz)
++static void setVideoAdditionalConfigFlava3(const struct drm_display_mode *mode)
 +{
++	u8 vic = drm_match_cea_mode(mode);
++
 +	i2c_init(1);
 +	i2c_waitset(0x10e7, 0x80);
-+	if (h == 2160) {
++	if (vic == 97) {
 +		/* Set VIC */
-+		i2c_mask(0x7227, 97, 0xff);
++		i2c_mask(0x7227, vic, 0xff);
 +	}
 +	/* Enable IT content */
 +	i2c_mask(0x7226, 1 << 7, 0x80);
@@ -1826,7 +1809,7 @@ index 000000000000..449f1a573515
 +	i2c_waitclear(0x7204, 0x40);
 +	i2c_delay(10);
 +	i2c_begin_block();
-+	if (h == 2160) {
++	if (vic == 97) {
 +		i2c_write(0x7019, 0x01);
 +	} else {
 +		i2c_write(0x7019, 0x00);
@@ -1842,12 +1825,12 @@ index 000000000000..449f1a573515
 +	i2c_waitclear(0x7a84, 0x01);
 +	i2c_begin_block();
 +	i2c_write(0x7a8b, 0x05);
-+	if (h == 2160) {
++	if (vic == 97) {
 +		i2c_write(0x7c00, 0x03);
 +		i2c_write_data(0x7a80, (u8[]){0xa8, 0x20, 0x00, 0x80}, 4);
 +	}
 +	i2c_end_block();
-+	if (h == 2160) {
++	if (vic == 97) {
 +		i2c_waitclear(0x7a84, 0x01);
 +	}
 +	i2c_begin_block();
@@ -1861,15 +1844,15 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void setHdmiVideoConfigFlava3(int w, int h, int hz)
++static void setHdmiVideoConfigFlava3(const struct drm_display_mode *mode)
 +{
 +	configParamFlava3Pre();
 +	configLinkTrainingFlava3();
-+	setHdmiBasicVideoConfigFlava3(w, h, hz);
++	setHdmiBasicVideoConfigFlava3(mode);
 +	initHdmiPhyForFlava3_1st();
 +	initHdmiPhyForFlava3_2nd();
 +	mask_7203();
-+	setVideoAdditionalConfigFlava3(w, h, hz);
++	setVideoAdditionalConfigFlava3(mode);
 +}
 +
 +static void setHdmiAudioConfigBasic(void)
@@ -1945,11 +1928,11 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void linkConfigVerde(int w, int h, int hz)
++static void linkConfigVerde(const struct drm_display_mode *mode)
 +{
 +	i2c_init(0);
 +	i2c_mask(0x105, 0x00, 0x40);
-+	if (h == 1440) {
++	if (mode->hdisplay == 2560 && mode->vdisplay == 1440) {
 +		i2c_cmd_2_1(0x400, 0x03);
 +	}
 +	i2c_begin_block();
@@ -1992,15 +1975,17 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void setHdmiBasicVideoConfigVerde(int w, int h, int hz)
++static void setHdmiBasicVideoConfigVerde(const struct drm_display_mode *mode)
 +{
++	u8 vic = drm_match_cea_mode(mode);
++
 +	i2c_init(0);
 +	i2c_begin_block();
-+	if (h == 1080) {
++	if (vic == 16) {
 +		i2c_write_data(0x3058, (u8[]){0x02, 0x0d, 0xef, 0x00, 0x28, 0x08, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 18);
-+	} else if (h == 1440) {
++	} else if (mode->hdisplay == 2560 && mode->vdisplay == 1440) {
 +		i2c_write_data(0x3058, (u8[]){0x02, 0x0d, 0xff, 0x00, 0x28, 0x08, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 18);
-+	} else if (h == 2160) {
++	} else if (vic == 97) {
 +		i2c_write_data(0x3058, (u8[]){0x02, 0x0d, 0x9e, 0x00, 0x28, 0x08, 0x61, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 18);
 +	}
 +	i2c_write_data(0x31d0, (u8[]){0x01, 0x19, 0x5f, 0x53, 0x43, 0x45, 0x49, 0x00, 0x00, 0x00, 0x00, 0x50, 0x53, 0x35, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08}, 28);
@@ -2025,12 +2010,12 @@ index 000000000000..449f1a573515
 +	i2c_exec();
 +}
 +
-+static void setHdmiVideoConfigVerde(int w, int h, int hz)
++static void setHdmiVideoConfigVerde(const struct drm_display_mode *mode)
 +{
-+	linkConfigVerde(w, h, hz);
++	linkConfigVerde(mode);
 +	configDpLinkTrainingVerde();
 +	setTmdsConfigVerde();
-+	setHdmiBasicVideoConfigVerde(w, h, hz);
++	setHdmiBasicVideoConfigVerde(mode);
 +}
 +
 +static void setAudioConfigForVerde(void)
@@ -2082,12 +2067,12 @@ index 000000000000..449f1a573515
 +}
 +EXPORT_SYMBOL(sceHdmiInitVideoConfig);
 +
-+void sceHdmiSetVideoConfig(int w, int h, int hz)
++void sceHdmiSetVideoConfig(const struct drm_display_mode *mode)
 +{
 +	if (hdmi_ic_type == HDMI_IC_TYPE_FLAVA3) {
-+		setHdmiVideoConfigFlava3(w, h, hz);
++		setHdmiVideoConfigFlava3(mode);
 +	} else {
-+		setHdmiVideoConfigVerde(w, h, hz);
++		setHdmiVideoConfigVerde(mode);
 +	}
 +}
 +EXPORT_SYMBOL(sceHdmiSetVideoConfig);
@@ -2171,6 +2156,28 @@ index 000000000000..449f1a573515
 +	return 0;
 +}
 +EXPORT_SYMBOL(getHdmiConfiguration);
++
++bool isHdmiModeValid(const struct drm_display_mode *mode, int force_1080p)
++{
++	u8 vic = drm_match_cea_mode(mode);
++
++	if (force_1080p)
++		return vic == 16; /* 1080p60 */
++
++	/* 1440p */
++	if (mode->hdisplay == 2560 && mode->vdisplay == 1440) {
++		return mode->clock == 241500 || mode->clock == 241700;
++	}
++
++	switch (vic) {
++	case 16: /* 1080p60 */
++	case 97: /* 2160p60 */
++		return true;
++	}
++
++	return false;
++}
++EXPORT_SYMBOL(isHdmiModeSupported);
 +
 +const struct drm_edid *real_edid = NULL;
 +
@@ -3505,14 +3512,15 @@ index 927f8a8b7a1d..474f1207e2f3 100644
  extern void dmi_setup(void);
 diff --git a/include/linux/ps5.h b/include/linux/ps5.h
 new file mode 100644
-index 000000000000..b510bd4f9dab
+index 000000000000..9d72e9e63497
 --- /dev/null
 +++ b/include/linux/ps5.h
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,76 @@
 +#ifndef _LINUX_PS5_H
 +#define _LINUX_PS5_H
 +
 +#include <linux/types.h>
++#include <drm/drm_modes.h>
 +
 +#define ICC_MSG_MIN_SIZE	0x20
 +#define ICC_MSG_MAX_SIZE 	0x7f0
@@ -3554,12 +3562,13 @@ index 000000000000..b510bd4f9dab
 +
 +void sceControlHdmiEvent(u8 enable);
 +void sceHdmiInitVideoConfig(void);
-+void sceHdmiSetVideoConfig(int w, int h, int hz);
++void sceHdmiSetVideoConfig(const struct drm_display_mode *mode);
 +void sceHdmiDeviceSetVideoMute(int mute);
 +void sceHdmiSetAudioConfig(void);
 +void sceHdmiSetAudioMute(int mute);
 +int getHdmiConfiguration(void);
 +int isHdmiEnabled(void);
++bool isHdmiModeValid(const struct drm_display_mode *mode, int force_1080p);
 +
 +int icc_nvs_write(u32 partition, u16 offset, u16 length, const void *data);
 +int icc_nvs_read(u32 partition, u16 offset, u16 length, void *data);
