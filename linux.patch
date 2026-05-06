@@ -1135,10 +1135,10 @@ index 000000000000..7acb030a4976
 +obj-y += spcie.o tpcie.o hdmi.o mp1.o
 diff --git a/drivers/ps5/hdmi.c b/drivers/ps5/hdmi.c
 new file mode 100644
-index 000000000000..d6bb29c1c008
+index 000000000000..043c9c051f35
 --- /dev/null
 +++ b/drivers/ps5/hdmi.c
-@@ -0,0 +1,1063 @@
+@@ -0,0 +1,1064 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -1748,10 +1748,10 @@ index 000000000000..d6bb29c1c008
 +	i2c_write(0x7009, 0x00);
 +	i2c_write(0x7040, 0x42);
 +	i2c_write(0x7225, 0x28);
-+	if (vic == 16) {
++	if (vic == 16 || vic == 63) {
 +		/* Set VIC and content type */
-+		i2c_write_data(0x7227, (u8[]){0x10, 0x00}, 2);
-+		i2c_write_data(0x7070, (u8[]){0x10, 0x10, 0x00, 0x00, 0x00, 0x00}, 6);
++		i2c_write_data(0x7227, (u8[]){vic, 0x00}, 2);
++		i2c_write_data(0x7070, (u8[]){vic, vic, 0x00, 0x00, 0x00, 0x00}, 6);
 +	} else if (mode->hdisplay == 2560 && mode->vdisplay == 1440) {
 +		/* Set VIC and content type */
 +		i2c_write_data(0x7227, (u8[]){0x04, 0x00}, 2);
@@ -2171,6 +2171,7 @@ index 000000000000..d6bb29c1c008
 +
 +	switch (vic) {
 +	case 16: /* 1080p60 */
++	case 63: /* 1080p120 */
 +	case 97: /* 2160p60 */
 +		return true;
 +	}
