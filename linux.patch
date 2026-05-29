@@ -506,10 +506,10 @@ index 20e6645ab737..bc98a92325b7 100644
  obj-$(CONFIG_PDC_ADMA)		+= pdc_adma.o
 diff --git a/drivers/ata/ahci_salina.c b/drivers/ata/ahci_salina.c
 new file mode 100644
-index 000000000000..1ba1ba77f86d
+index 000000000000..c020194eb44a
 --- /dev/null
 +++ b/drivers/ata/ahci_salina.c
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,340 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * PlayStation 5 Salina SATA / BD-ROM AHCI host driver
@@ -530,29 +530,9 @@ index 000000000000..1ba1ba77f86d
 +#include "ahci.h"
 +#include "ahci_salina_phy.h"
 +
-+#define SALINA_ICC_POWER_SVC	0x05
-+#define SALINA_ICC_POWER_SET	0x00
++#define PCI_DEVICE_ID_SPCIE	0x9107
++
 +#define SALINA_ICC_DEV_BD	0x01
-+
-+static void salina_bd_icc_power_on(struct device *dev)
-+{
-+	u8 q[ICC_MSG_MAX_SIZE] = {0};
-+	u8 r[ICC_MSG_MAX_SIZE] = {0};
-+	struct icc_msg *m = (struct icc_msg *)q;
-+	int rc;
-+
-+	m->service_id	= SALINA_ICC_POWER_SVC;
-+	m->msg_type	= SALINA_ICC_POWER_SET;
-+	m->length	= 0x20;
-+	m->data[0]	= SALINA_ICC_DEV_BD;
-+	m->data[1]	= 0x01;
-+
-+	rc = icc_query(q, r);
-+	if (rc == -ETIMEDOUT)
-+		dev_info(dev, "BD drive already powered on\n");
-+	else if (rc)
-+		dev_warn(dev, "ICC BD power-on returned %d\n", rc);
-+}
 +
 +struct salina_ahci {
 +	struct salina_sata_phy	phy;
@@ -563,7 +543,7 @@ index 000000000000..1ba1ba77f86d
 +{
 +	struct pci_dev *glue;
 +
-+	glue = pci_get_device(SALINA_VENDOR_ID, SALINA_GLUE_ID, NULL);
++	glue = pci_get_device(PCI_VENDOR_ID_SONY, PCI_DEVICE_ID_SPCIE, NULL);
 +	if (!glue)
 +		return -ENODEV;
 +
@@ -612,7 +592,7 @@ index 000000000000..1ba1ba77f86d
 +static int salina_pick_bar(u16 devid, u32 chip_id, unsigned int *abar,
 +			   u32 *port_off)
 +{
-+	bool is_9106 = (devid == SALINA_SATA_ID_B);
++	bool is_9106 = (devid == PCI_DEVICE_ID_AHCI_B);
 +
 +	if (!is_9106 && chip_id == SALINA_CHIP_SALINA2)
 +		return -ENODEV;
@@ -646,6 +626,7 @@ index 000000000000..1ba1ba77f86d
 +	struct salina_ahci *sa;
 +	unsigned int abar, n_ports;
 +	u32 chip_id;
++	u8 state;
 +	int rc;
 +
 +	if (!spcie_is_initialized()) {
@@ -699,7 +680,9 @@ index 000000000000..1ba1ba77f86d
 +	sa->phy.rx_tracelen	= 0xff;
 +	sa->phy.tx_tracelen	= 0xff;
 +
-+	salina_bd_icc_power_on(dev);
++	icc_device_power_get(SALINA_ICC_DEV_BD, &state);
++	if (state != 1)
++		icc_device_power_control(SALINA_ICC_DEV_BD, 1);
 +
 +	rc = salina_sata_phy_init(&sa->phy);
 +	if (rc) {
@@ -845,8 +828,8 @@ index 000000000000..1ba1ba77f86d
 +static SIMPLE_DEV_PM_OPS(salina_ahci_pm, salina_ahci_suspend, salina_ahci_resume);
 +
 +static const struct pci_device_id salina_ahci_tbl[] = {
-+	{ PCI_DEVICE(SALINA_VENDOR_ID, SALINA_SATA_ID_A) },
-+	{ PCI_DEVICE(SALINA_VENDOR_ID, SALINA_SATA_ID_B) },
++	{ PCI_DEVICE(PCI_VENDOR_ID_SONY, PCI_DEVICE_ID_AHCI_A) },
++	{ PCI_DEVICE(PCI_VENDOR_ID_SONY, PCI_DEVICE_ID_AHCI_B) },
 +	{ }
 +};
 +MODULE_DEVICE_TABLE(pci, salina_ahci_tbl);
@@ -1058,10 +1041,10 @@ index 000000000000..c5e85ae102ea
 +}
 diff --git a/drivers/ata/ahci_salina_phy.h b/drivers/ata/ahci_salina_phy.h
 new file mode 100644
-index 000000000000..71a33382d920
+index 000000000000..39cc76f39e06
 --- /dev/null
 +++ b/drivers/ata/ahci_salina_phy.h
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,45 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +#ifndef _SALINA_SATA_PHY_H
 +#define _SALINA_SATA_PHY_H
@@ -1069,10 +1052,8 @@ index 000000000000..71a33382d920
 +#include <linux/types.h>
 +#include <linux/io.h>
 +
-+#define SALINA_VENDOR_ID	0x104d
-+#define SALINA_SATA_ID_A	0x9105
-+#define SALINA_SATA_ID_B	0x9106
-+#define SALINA_GLUE_ID		0x9107
++#define PCI_DEVICE_ID_AHCI_A	0x9105
++#define PCI_DEVICE_ID_AHCI_B	0x9106
 +
 +#define SALINA_DEVID_A		0x9105104d
 +#define SALINA_DEVID_B		0x9106104d
@@ -1347,7 +1328,7 @@ index 321310ba2c08..764da52902ac 100644
  	header = (const struct common_firmware_header *)
  		adev->sdma.instance[instance].fw->data;
 diff --git a/drivers/gpu/drm/amd/amdgpu/gfx_v10_0.c b/drivers/gpu/drm/amd/amdgpu/gfx_v10_0.c
-index 8b60299b73ef..db803401a3be 100644
+index 8b60299b73ef..0a3ad54066d6 100644
 --- a/drivers/gpu/drm/amd/amdgpu/gfx_v10_0.c
 +++ b/drivers/gpu/drm/amd/amdgpu/gfx_v10_0.c
 @@ -4202,6 +4202,14 @@ static void gfx_v10_0_check_gfxoff_flag(struct amdgpu_device *adev)
@@ -1425,7 +1406,7 @@ index 8b60299b73ef..db803401a3be 100644
  		amdgpu_gfx_cp_init_microcode(adev, AMDGPU_UCODE_ID_CP_MEC2);
  		amdgpu_gfx_cp_init_microcode(adev, AMDGPU_UCODE_ID_CP_MEC2_JT);
  	} else {
-@@ -10104,6 +10131,24 @@ static u32 gfx_v10_0_get_cu_active_bitmap_per_sh(struct amdgpu_device *adev)
+@@ -10104,6 +10130,24 @@ static u32 gfx_v10_0_get_cu_active_bitmap_per_sh(struct amdgpu_device *adev)
  	return cu_active_bitmap;
  }
  
@@ -1450,7 +1431,7 @@ index 8b60299b73ef..db803401a3be 100644
  static int gfx_v10_0_get_cu_info(struct amdgpu_device *adev,
  				 struct amdgpu_cu_info *cu_info)
  {
-@@ -10117,6 +10162,45 @@ static int gfx_v10_0_get_cu_info(struct amdgpu_device *adev,
+@@ -10117,6 +10161,45 @@ static int gfx_v10_0_get_cu_info(struct amdgpu_device *adev,
  	amdgpu_gfx_parse_disable_cu(adev, disable_masks, 4, 2);
  
  	mutex_lock(&adev->grbm_idx_mutex);
@@ -5221,7 +5202,7 @@ index 000000000000..d2c25e461bf7
 +#endif /* _AUTOSERVO_PARAM_H */
 diff --git a/drivers/ps5/hdmi.c b/drivers/ps5/hdmi.c
 new file mode 100644
-index 000000000000..1193d840f5d6
+index 000000000000..81cc3b99d7e2
 --- /dev/null
 +++ b/drivers/ps5/hdmi.c
 @@ -0,0 +1,1226 @@
@@ -5747,8 +5728,8 @@ index 000000000000..1193d840f5d6
 +
 +void hdmiSystemResume(void)
 +{
-+	sceSetBackToUnpluggedSequence();
-+	sceSetBackToWaitResolutionSequence();
++	// sceSetBackToUnpluggedSequence();
++	// sceSetBackToWaitResolutionSequence();
 +	if (hdmi_ic_type == HDMI_IC_TYPE_FLAVA3) {
 +		i2c_cmd_4_2();
 +		// sceSetHdcpSequence1st();
@@ -6947,10 +6928,10 @@ index 000000000000..4af890c842a7
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/spcie.c b/drivers/ps5/spcie.c
 new file mode 100644
-index 000000000000..8a073f2f0f0a
+index 000000000000..13337f7a0db9
 --- /dev/null
 +++ b/drivers/ps5/spcie.c
-@@ -0,0 +1,1084 @@
+@@ -0,0 +1,1120 @@
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -7359,6 +7340,42 @@ index 000000000000..8a073f2f0f0a
 +	return icc_query(buf, buf);
 +}
 +EXPORT_SYMBOL(icc_thermal_enable_notification);
++
++int icc_device_power_control(u8 device, u8 state)
++{
++	u8 buf[ICC_MSG_MAX_SIZE] = {};
++	struct icc_msg *msg = (struct icc_msg *)buf;
++
++	msg->service_id = ICC_SERVICE_ID_DEVICE;
++	msg->msg_type = 0;
++	msg->length = 0x20;
++	msg->data[0] = device;
++	msg->data[1] = state;
++
++	return icc_query(buf, buf);
++}
++EXPORT_SYMBOL(icc_device_power_control);
++
++int icc_device_power_get(u8 device, u8 *state)
++{
++	u8 buf[ICC_MSG_MAX_SIZE] = {};
++	struct icc_msg *msg = (struct icc_msg *)buf;
++	int ret;
++
++	msg->service_id = ICC_SERVICE_ID_DEVICE;
++	msg->msg_type = 1;
++	msg->length = 0x20;
++	msg->data[0] = device;
++
++	ret = icc_query(buf, buf);
++	if (ret)
++		return ret;
++
++	*state = msg->data[2];
++
++	return 0;
++}
++EXPORT_SYMBOL(icc_device_power_get);
 +
 +int icc_indicator_set_led(const u8 setting[], size_t setting_size)
 +{
@@ -8360,10 +8377,10 @@ index 2eedf44e6801..2785a47665be 100644
  extern void dmi_setup(void);
 diff --git a/include/linux/ps5.h b/include/linux/ps5.h
 new file mode 100644
-index 000000000000..7ed7adc99719
+index 000000000000..ed03edcab7c5
 --- /dev/null
 +++ b/include/linux/ps5.h
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,92 @@
 +#ifndef _LINUX_PS5_H
 +#define _LINUX_PS5_H
 +
@@ -8390,18 +8407,18 @@ index 000000000000..7ed7adc99719
 +	ICC_SERVICE_ID_NVS		= 0x03,
 +	ICC_SERVICE_ID_POWER		= 0x04,
 +	ICC_SERVICE_ID_DEVICE		= 0x05,
-+	ICC_SERVICE_ID_UNKNOWN1		= 0x07,
++	ICC_SERVICE_ID_UNKNOWN_07	= 0x07,
 +	ICC_SERVICE_ID_BUTTON		= 0x08,
 +	ICC_SERVICE_ID_INDICATOR	= 0x09,
 +	ICC_SERVICE_ID_FAN		= 0x0a,
 +	ICC_SERVICE_ID_THERMAL		= 0x0b,
 +	ICC_SERVICE_ID_HDMI		= 0x10,
 +	ICC_SERVICE_ID_USBC		= 0x12,
-+	ICC_SERVICE_ID_UNKNOWN3		= 0x13,
++	ICC_SERVICE_ID_UNKNOWN_13	= 0x13,
 +	ICC_SERVICE_ID_CRASH_REPORT	= 0x14,
 +	ICC_SERVICE_ID_BDDRIVE		= 0x15,
-+	ICC_SERVICE_ID_UNKNOWN4		= 0x8c,
-+	ICC_SERVICE_ID_UNKNOWN5		= 0x8d,
++	ICC_SERVICE_ID_UNKNOWN_8C	= 0x8c,
++	ICC_SERVICE_ID_UNKNOWN_8D	= 0x8d,
 +	ICC_SERVICE_ID_SC_CONFIG	= 0x8e,
 +	ICC_SERVICE_ID_FLOYD		= 0x9a,
 +};
@@ -8439,6 +8456,9 @@ index 000000000000..7ed7adc99719
 +int icc_button_enable_notification(u8 type, u8 enable);
 +int icc_button_enable_all_notifications(u8 enable);
 +int icc_thermal_enable_notification(u8 enable);
++
++int icc_device_power_control(u8 device, u8 state);
++int icc_device_power_get(u8 device, u8 *state);
 +
 +int icc_indicator_set_led(const u8 setting[], size_t setting_size);
 +int icc_indicator_set_led_white(u8 level);
