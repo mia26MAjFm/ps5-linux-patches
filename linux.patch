@@ -1091,7 +1091,7 @@ index 000000000000..39cc76f39e06
 +
 +#endif
 diff --git a/drivers/bluetooth/btusb.c b/drivers/bluetooth/btusb.c
-index 830fefb342c6..f13155f049c4 100644
+index 830fefb342c6..380bc421583d 100644
 --- a/drivers/bluetooth/btusb.c
 +++ b/drivers/bluetooth/btusb.c
 @@ -67,6 +67,10 @@ static struct usb_driver btusb_driver;
@@ -1112,10 +1112,10 @@ index 830fefb342c6..f13155f049c4 100644
 +       /* PS5 IW620 Bluetooth device */
 +	{ USB_DEVICE(0x1286, 0x2059),
 +	  .driver_info = BTUSB_MARVELL |
-+					 BTUSB_IFNUM_0 |
-+					 BTUSB_BROKEN_LE_DEFAULT_PHY |
-+					 BTUSB_BROKEN_READ_LOCAL_NAME |
-+					 BTUSB_NO_AUTOSUSPEND },
++			 BTUSB_IFNUM_0 |
++			 BTUSB_BROKEN_LE_DEFAULT_PHY |
++			 BTUSB_BROKEN_READ_LOCAL_NAME |
++			 BTUSB_NO_AUTOSUSPEND },
 +
  	{ }	/* Terminating entry */
  };
@@ -1125,10 +1125,10 @@ index 830fefb342c6..f13155f049c4 100644
  	{ USB_DEVICE(0x1286, 0x2046), .driver_info = BTUSB_MARVELL },
  	{ USB_DEVICE(0x1286, 0x204e), .driver_info = BTUSB_MARVELL },
 +	{ USB_DEVICE(0x1286, 0x2059), .driver_info = BTUSB_MARVELL |
-+												 BTUSB_IFNUM_0 |
-+											 	 BTUSB_BROKEN_LE_DEFAULT_PHY |
-+											 	 BTUSB_BROKEN_READ_LOCAL_NAME |
-+											 	 BTUSB_NO_AUTOSUSPEND },
++						     BTUSB_IFNUM_0 |
++						     BTUSB_BROKEN_LE_DEFAULT_PHY |
++						     BTUSB_BROKEN_READ_LOCAL_NAME |
++						     BTUSB_NO_AUTOSUSPEND },
  
  	/* Intel Bluetooth devices */
  	{ USB_DEVICE(0x8087, 0x0025), .driver_info = BTUSB_INTEL_COMBINED },
