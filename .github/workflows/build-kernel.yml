@@ -20,13 +20,13 @@ on:
         default: ''
 jobs:
   build:
-    runs-on: self-hosted
-    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
     permissions:
       contents: write
 
     env:
-      CCACHE_DIR: /home/opc/ccache
+      CCACHE_DIR: /tmp/ccache
 
     steps:
       - name: Checkout image builder
@@ -34,7 +34,7 @@ jobs:
         with:
           repository: ps5-linux/ps5-linux-image
           path: image
-          ref: main
+          ref: build-image-rpm-in-all-format
 
       - name: Build kernel
         run: |
@@ -74,7 +74,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
-        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && github.repository == 'ps5-linux/ps5-linux-patches'
         uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
