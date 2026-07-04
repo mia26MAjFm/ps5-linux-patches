@@ -43,14 +43,17 @@ jobs:
           bash image/build_image.sh --kernel-only \
             --distro "$FORMAT" \
             --patches-ref "$PATCHES_REF"
-          # build_image.sh's --distro all skips the rpm packager. Run the rpm
-          # branch explicitly so the release ships .rpm alongside .deb/.pkg.tar.zst.
-          # ccache holds the kernel objects — this second call only re-runs
-          # the rpm packaging step.
+          # build_image.sh's --distro all skips the rpm packager, and each
+          # kernel-build call wipes image/linux-bin/. Stash the deb + pkg.tar.zst
+          # from the "all" run before firing the rpm-producing "fedora" run,
+          # then restore so the release ships all three formats.
           if [ "$FORMAT" = "all" ]; then
+            mkdir -p /tmp/kernel-stash
+            cp image/linux-bin/*.deb image/linux-bin/*.pkg.tar.zst /tmp/kernel-stash/
             bash image/build_image.sh --kernel-only \
               --distro fedora \
               --patches-ref "$PATCHES_REF"
+            cp /tmp/kernel-stash/*.deb /tmp/kernel-stash/*.pkg.tar.zst image/linux-bin/
           fi
 
       - name: Read kernel and patches version
