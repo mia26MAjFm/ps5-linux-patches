@@ -336,10 +336,12 @@ index 000000000000..5263181876f8
 +obj-$(CONFIG_X86_PS5) += ps5.o
 diff --git a/arch/x86/platform/ps5/ps5.c b/arch/x86/platform/ps5/ps5.c
 new file mode 100644
-index 000000000000..731fed163a83
+index 000000000000..acfbaf873315
 --- /dev/null
 +++ b/arch/x86/platform/ps5/ps5.c
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,53 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#include <linux/module.h>
 +#include <linux/ps5.h>
 +
@@ -3417,10 +3419,12 @@ index 000000000000..b4b42394aed9
 +obj-y += led/
 diff --git a/drivers/ps5/autoservo_param.h b/drivers/ps5/autoservo_param.h
 new file mode 100644
-index 000000000000..d2c25e461bf7
+index 000000000000..612aee5b273a
 --- /dev/null
 +++ b/drivers/ps5/autoservo_param.h
-@@ -0,0 +1,1902 @@
+@@ -0,0 +1,1904 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++
 +#ifndef _AUTOSERVO_PARAM_H
 +#define _AUTOSERVO_PARAM_H
 +
@@ -5821,10 +5825,12 @@ index 000000000000..33a48c664f73
 +MODULE_ALIAS("platform:ps5-fan");
 diff --git a/drivers/ps5/hdmi.c b/drivers/ps5/hdmi.c
 new file mode 100644
-index 000000000000..8f094490d677
+index 000000000000..67871f238abe
 --- /dev/null
 +++ b/drivers/ps5/hdmi.c
-@@ -0,0 +1,1237 @@
+@@ -0,0 +1,1239 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -7579,10 +7585,12 @@ index 000000000000..a234788e9990
 +#endif
 diff --git a/drivers/ps5/mp1.c b/drivers/ps5/mp1.c
 new file mode 100644
-index 000000000000..4af890c842a7
+index 000000000000..3bd1375a444c
 --- /dev/null
 +++ b/drivers/ps5/mp1.c
-@@ -0,0 +1,488 @@
+@@ -0,0 +1,490 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -8132,10 +8140,12 @@ index 000000000000..5ea1519823c3
 +#endif /* _PS5_FAN_H */
 diff --git a/drivers/ps5/spcie.c b/drivers/ps5/spcie.c
 new file mode 100644
-index 000000000000..4a28451f89eb
+index 000000000000..7e2be5605399
 --- /dev/null
 +++ b/drivers/ps5/spcie.c
-@@ -0,0 +1,1146 @@
+@@ -0,0 +1,1148 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/module.h>
@@ -9284,10 +9294,12 @@ index 000000000000..4a28451f89eb
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/svm.c b/drivers/ps5/svm.c
 new file mode 100644
-index 000000000000..3fd58e9a6609
+index 000000000000..b9e7def39ef7
 --- /dev/null
 +++ b/drivers/ps5/svm.c
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,171 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#include <linux/module.h>
 +#include <linux/ps5.h>
 +
@@ -9459,10 +9471,12 @@ index 000000000000..3fd58e9a6609
 +EXPORT_SYMBOL(svm_execute_guest);
 diff --git a/drivers/ps5/tpcie.c b/drivers/ps5/tpcie.c
 new file mode 100644
-index 000000000000..23de43ea4b00
+index 000000000000..7e933c30fc3e
 --- /dev/null
 +++ b/drivers/ps5/tpcie.c
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,305 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
 +#include <linux/console.h>
@@ -9768,10 +9782,12 @@ index 000000000000..23de43ea4b00
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/vmenter.S b/drivers/ps5/vmenter.S
 new file mode 100644
-index 000000000000..f5348c0d7e82
+index 000000000000..e3fd6f3e59b6
 --- /dev/null
 +++ b/drivers/ps5/vmenter.S
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++
 +#include <linux/linkage.h>
 +#include <asm/asm.h>
 +
@@ -10551,10 +10567,12 @@ index c8700e6a694d..7d0afd378c4e 100644
  extern void dmi_setup(void);
 diff --git a/include/linux/ps5.h b/include/linux/ps5.h
 new file mode 100644
-index 000000000000..24adcd953ab3
+index 000000000000..75a2d6dace5d
 --- /dev/null
 +++ b/include/linux/ps5.h
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,97 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++
 +#ifndef _LINUX_PS5_H
 +#define _LINUX_PS5_H
 +
