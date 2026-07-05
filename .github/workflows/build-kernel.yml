@@ -29,6 +29,11 @@ jobs:
       CCACHE_DIR: /home/opc/ccache
 
     steps:
+      - name: Clean image workspace
+        # Docker containers write to image/linux-bin/ as root; actions/checkout's
+        # git clean runs as the runner user and skips root-owned files, so stale
+        # .deb / .pkg.tar.zst from prior kernel versions leak into the release.
+        run: sudo rm -rf image
       - name: Checkout image builder
         uses: actions/checkout@v6
         with:
