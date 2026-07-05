@@ -5626,7 +5626,7 @@ index 000000000000..f48ad6f92534
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/ps5/fan.c b/drivers/ps5/fan.c
 new file mode 100644
-index 000000000000..040c08ad1a7b
+index 000000000000..e68819f9e32a
 --- /dev/null
 +++ b/drivers/ps5/fan.c
 @@ -0,0 +1,368 @@
@@ -5642,7 +5642,7 @@ index 000000000000..040c08ad1a7b
 +#include "ps5-fan.h"
 +#include "autoservo_param.h"
 +
-+#define PS5_FAN_BOOT_TARGET_TEMP	75
++#define PS5_FAN_BOOT_TARGET_TEMP	80
 +
 +#define GDDR6_SAMSUNG		0x01
 +#define GDDR6_HYNIX		0x06
